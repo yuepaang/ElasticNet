@@ -33,11 +33,16 @@ class Elastic_Net:
         else:
             return 0
 
+    def _softThresh(self, x, lambda_):
+        return np.sign(x) *  np.maximum(np.zeros((x.shape[0], 1)), np.abs(x) - lambda_)
+
     def fit_transform(self, X):
         if self.normalize:
             self.X_scaled = scale(X)
+        else:
+            self.X_scaled = X
 
-    def fit(self, X, y):
+    def cd_fit(self, X, y):
         self.fit_transform(X)
         beta = np.zeros((self.X_scaled.shape[1], 1))
         beta_list = [1] * (self.max_iter)
@@ -57,6 +62,33 @@ class Elastic_Net:
         self.coef_ = beta
         return self
 
+    def admm_fit(self, X, y):
+        self.fit_transform(X)
+        XX = np.dot(self.X_scaled.T, self.X_scaled)
+        Xy = np.dot(self.X_scaled.T, y)
+
+        p = self.X_scaled.shape[1]
+        lambda_ = np.zeros((p, 1))
+        rho = 4
+        z0 = z = beta0 = beta = np.zeros((p, 1))
+        Sinv = np.linalg.inv(XX + np.dot(rho, np.diag([1] * p)))
+
+        for i in range(self.max_iter):
+            beta = np.dot(Sinv, (Xy + rho * z - lambda_))
+            # update z
+            z = self._softThresh(beta + lambda_ / rho, (lambda_ * self.l1_ratio) / rho) / (1 + self.alpha * (1 - self.l1_ratio))
+            # update lambda_
+            lambda_ += rho * (beta - z)
+
+            change = np.maximum(np.linalg.norm(beta - beta0, ord=2), np.linalg.norm(z - z0, ord=2))
+            if change < self.eps or i > self.max_iter:
+                break
+            beta0 = beta
+            z0 = z
+
+        self.coef_ = z
+        return self
+
     def predict(self, X):
         y = np.dot(X, self.coef_)
         return y
@@ -64,6 +96,10 @@ class Elastic_Net:
 if __name__ == "__main__":
     alphas = [0.01, 0.1, 1, 10]
     for _, v in enumerate(alphas):
-        model = Elastic_Net(alpha=v, l1_ratio=0.95)
-        model.fit(X, y)
-        print(mean_squared_error(model.predict(X), y))
+        model_cd = Elastic_Net(alpha=v, l1_ratio=0.95, normalize=False)
+        model_cd.cd_fit(X, y)
+        model_admm = Elastic_Net(alpha=v, l1_ratio=0.95, normalize=False)
+        model_admm.admm_fit(X, y)
+        print(mean_squared_error(model_cd.predict(X), y))
+        print(mean_squared_error(model_admm.predict(X), y))
+
