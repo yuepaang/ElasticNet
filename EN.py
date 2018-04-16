@@ -2,16 +2,13 @@
 """
 Created on Thur Apr 6 2018
 
-@author: Yue Peng, Ludan Zhang, Jiachen Zhang
+@author: Yue Peng
 """
 import pandas as pd
 import numpy as np
 from copy import deepcopy
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import scale
-
-X = np.array(pd.read_csv("X.csv", header=None), dtype=np.float64)
-y = np.array(pd.read_csv("y.csv", header=None), dtype=np.float64)
 
 
 class Elastic_Net:
@@ -83,6 +80,7 @@ class Elastic_Net:
             change = np.maximum(np.linalg.norm(beta - beta0, ord=2), np.linalg.norm(z - z0, ord=2))
             if change < self.eps or i > self.max_iter:
                 break
+
             beta0 = beta
             z0 = z
 
@@ -93,13 +91,38 @@ class Elastic_Net:
         y = np.dot(X, self.coef_)
         return y
 
+    def score(self, y):
+        return mean_squared_error(self.predict(self.X_scaled), y)
+
 if __name__ == "__main__":
+    X = np.array(pd.read_csv("X.csv", header=None), dtype=np.float64)
+    y = np.array(pd.read_csv("y.csv", header=None), dtype=np.float64)
+    # problem 1
     alphas = [0.01, 0.1, 1, 10]
-    for _, v in enumerate(alphas):
-        model_cd = Elastic_Net(alpha=v, l1_ratio=0.95, normalize=False)
+    b1 = pd.DataFrame()
+    for i, v in enumerate(alphas):
+        model_cd = Elastic_Net(alpha=v, l1_ratio=0.95, normalize=True)
         model_cd.cd_fit(X, y)
-        model_admm = Elastic_Net(alpha=v, l1_ratio=0.95, normalize=False)
+        model_admm = Elastic_Net(alpha=v, l1_ratio=0.95, normalize=True)
         model_admm.admm_fit(X, y)
-        print(mean_squared_error(model_cd.predict(X), y))
-        print(mean_squared_error(model_admm.predict(X), y))
+        print(model_cd.score(y), model_admm.score(y))
+        if model_cd.score(y) <= model_admm.score(y):
+            b1[v] = pd.Series([i[0] for i in model_admm.coef_])
+        else:
+            b1[v] = pd.Series([i[0] for i in model_cd.coef_])
+    b1.to_csv("b1.csv", header=None, index=None)
+    # problem 2
+    alphas = [0.01, 0.1, 1, 10]
+    b2 = pd.DataFrame()
+    for i, v in enumerate(alphas):
+        model_cd = Elastic_Net(alpha=v, l1_ratio=1.0, normalize=True)
+        model_admm = Elastic_Net(alpha=v, l1_ratio=1.0, normalize=True)
+        model_cd.cd_fit(X, y)
+        model_admm.admm_fit(X, y)
+        print(model_cd.score(y), model_admm.score(y))
+        if model_cd.score(y) <= model_admm.score(y):
+            b2[v] = pd.Series([i[0] for i in model_admm.coef_])
+        else:
+            b2[v] = pd.Series([i[0] for i in model_cd.coef_])
+    b2.to_csv("b2.csv", header=None, index=None)
 
